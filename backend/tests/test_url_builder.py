@@ -136,6 +136,45 @@ class TestBuildScrapeUrl:
             "velikost-od-40-do-80-m2/letnik-od-1990-do-2020/"
         )
 
+    def test_croatian_basic_url(self):
+        filters = ProjectFilters(
+            country="hr",
+            transaction="prodaja",
+            region="primorsko-goranska",
+            property_type="stanovanje",
+        )
+        url = build_scrape_url(filters)
+        assert url == "https://www.nepremicnine.net/oglasi-prodaja/primorsko-goranska/stanovanje/"
+
+    def test_croatian_url_with_price_range(self):
+        filters = ProjectFilters(
+            country="hr",
+            transaction="prodaja",
+            region="istrska",
+            property_type="hisa",
+            price_from=100000,
+            price_to=300000,
+        )
+        url = build_scrape_url(filters)
+        assert url == (
+            "https://www.nepremicnine.net/oglasi-prodaja/istrska/hisa/"
+            "cena-od-100000-do-300000-eur/"
+        )
+
+    def test_croatian_url_rent(self):
+        filters = ProjectFilters(
+            country="hr",
+            transaction="oddaja",
+            region="mesto-zagreb",
+            property_type="stanovanje",
+            rooms=["2-sobno", "3-sobno"],
+        )
+        url = build_scrape_url(filters)
+        assert url == (
+            "https://www.nepremicnine.net/oglasi-oddaja/mesto-zagreb/stanovanje/"
+            "2-sobno,3-sobno/"
+        )
+
 
 class TestBuildPaginatedUrl:
     def test_page_1_returns_base_url(self):
