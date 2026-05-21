@@ -216,3 +216,68 @@ class TestProjectFiltersValidation:
                 year_from=2020,
                 year_to=2000,
             )
+
+    def test_country_defaults_to_si(self):
+        filters = ProjectFilters(
+            transaction="prodaja",
+            region="gorenjska",
+            property_type="stanovanje",
+        )
+        assert filters.country == "si"
+
+    def test_croatian_country_with_croatian_region(self):
+        filters = ProjectFilters(
+            country="hr",
+            transaction="prodaja",
+            region="primorsko-goranska",
+            property_type="stanovanje",
+        )
+        assert filters.country == "hr"
+        assert filters.region == "primorsko-goranska"
+
+    def test_croatian_country_with_slovenian_region_rejected(self):
+        with pytest.raises(ValueError, match="Invalid region"):
+            ProjectFilters(
+                country="hr",
+                transaction="prodaja",
+                region="gorenjska",
+                property_type="stanovanje",
+            )
+
+    def test_slovenian_country_with_croatian_region_rejected(self):
+        with pytest.raises(ValueError, match="Invalid region"):
+            ProjectFilters(
+                country="si",
+                transaction="prodaja",
+                region="primorsko-goranska",
+                property_type="stanovanje",
+            )
+
+    def test_croatian_country_rejects_sub_region(self):
+        with pytest.raises(ValueError, match="sub_region"):
+            ProjectFilters(
+                country="hr",
+                transaction="prodaja",
+                region="primorsko-goranska",
+                sub_region="anything",
+                property_type="stanovanje",
+            )
+
+    def test_croatian_country_allows_null_sub_region(self):
+        filters = ProjectFilters(
+            country="hr",
+            transaction="prodaja",
+            region="istrska",
+            sub_region=None,
+            property_type="stanovanje",
+        )
+        assert filters.sub_region is None
+
+    def test_invalid_country_value_rejected(self):
+        with pytest.raises(ValueError):
+            ProjectFilters(
+                country="xx",
+                transaction="prodaja",
+                region="gorenjska",
+                property_type="stanovanje",
+            )

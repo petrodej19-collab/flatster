@@ -7,6 +7,7 @@ from app.scraper.constants import PROPERTY_TYPES, REGIONS, ROOM_TYPES, SUBREGION
 
 
 class ProjectFilters(BaseModel):
+    country: Literal["si", "hr"] = "si"
     transaction: Literal["prodaja", "oddaja"]
     region: str
     sub_region: str | None = None
@@ -21,9 +22,13 @@ class ProjectFilters(BaseModel):
 
     @field_validator("region")
     @classmethod
-    def validate_region(cls, v: str) -> str:
-        if v not in REGIONS:
-            raise ValueError(f"Invalid region: {v}. Must be one of: {list(REGIONS.keys())}")
+    def validate_region(cls, v: str, info) -> str:
+        country = info.data.get("country", "si")
+        valid = REGIONS.get(country, {})
+        if v not in valid:
+            raise ValueError(
+                f"Invalid region: {v} for country {country}. Must be one of: {list(valid.keys())}"
+            )
         return v
 
     @field_validator("property_type")
@@ -38,11 +43,19 @@ class ProjectFilters(BaseModel):
     def validate_sub_region(cls, v: str | None, info) -> str | None:
         if v is None:
             return v
+        country = info.data.get("country", "si")
         region = info.data.get("region")
-        if region and region in SUBREGIONS:
-            if v not in SUBREGIONS[region]:
-                valid = list(SUBREGIONS[region].keys())
-                raise ValueError(f"Invalid sub_region: {v} for region {region}. Must be one of: {valid}")
+        country_subs = SUBREGIONS.get(country, {})
+        if not country_subs:
+            raise ValueError(
+                f"sub_region is not supported for country {country}"
+            )
+        if region and region in country_subs:
+            if v not in country_subs[region]:
+                valid = list(country_subs[region].keys())
+                raise ValueError(
+                    f"Invalid sub_region: {v} for region {region}. Must be one of: {valid}"
+                )
         return v
 
     @field_validator("rooms")
