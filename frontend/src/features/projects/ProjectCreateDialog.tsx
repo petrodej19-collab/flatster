@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  COUNTRIES,
   REGIONS,
   SUBREGIONS,
   PROPERTY_TYPES,
@@ -19,9 +20,12 @@ import {
   TRANSACTION_TYPES,
 } from "@/lib/constants"
 
+type Country = "si" | "hr"
+
 export function ProjectCreateDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
+  const [country, setCountry] = useState<Country>("si")
   const [transaction, setTransaction] = useState("prodaja")
   const [region, setRegion] = useState("")
   const [subRegion, setSubRegion] = useState("")
@@ -38,8 +42,18 @@ export function ProjectCreateDialog() {
   const createProject = useCreateProject()
   const navigate = useNavigate()
 
-  const subRegions = region ? SUBREGIONS[region] || {} : {}
-  const showRooms = propertyType === "stanovanje"
+  const countryRegions = REGIONS[country] || {}
+  const countrySubregions = SUBREGIONS[country] || {}
+  const subRegions = region ? countrySubregions[region] || {} : {}
+  const hasSubRegions = Object.keys(countrySubregions).length > 0
+  const showRooms = propertyType === "stanowanie"
+
+  const handleCountryChange = (value: string) => {
+    const next = (value === "hr" ? "hr" : "si") as Country
+    setCountry(next)
+    setRegion("")
+    setSubRegion("")
+  }
 
   const handleRoomToggle = (room: string) => {
     setRooms((prev) =>
@@ -54,9 +68,10 @@ export function ProjectCreateDialog() {
     }
 
     const filters: ProjectFilters = {
+      country,
       transaction,
       region,
-      sub_region: subRegion || null,
+      sub_region: hasSubRegions ? subRegion || null : null,
       property_type: propertyType,
       rooms: showRooms && rooms.length > 0 ? rooms : null,
       price_from: priceFrom ? Number(priceFrom) : null,
@@ -91,6 +106,19 @@ export function ProjectCreateDialog() {
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My search" />
           </div>
 
+          <div className="space-y-2">
+            <Label>Country</Label>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={country}
+              onChange={(e) => handleCountryChange(e.target.value)}
+            >
+              {Object.entries(COUNTRIES).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Transaction</Label>
@@ -121,38 +149,54 @@ export function ProjectCreateDialog() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {hasSubRegions ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Region</Label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={region}
+                  onChange={(e) => {
+                    setRegion(e.target.value)
+                    setSubRegion("")
+                  }}
+                >
+                  <option value="">Select region...</option>
+                  {Object.entries(countryRegions).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Sub-region (optional)</Label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={subRegion}
+                  onChange={(e) => setSubRegion(e.target.value)}
+                  disabled={!region}
+                >
+                  <option value="">All</option>
+                  {Object.entries(subRegions).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
             <div className="space-y-2">
               <Label>Region</Label>
               <select
                 className="w-full rounded-md border px-3 py-2 text-sm"
                 value={region}
-                onChange={(e) => {
-                  setRegion(e.target.value)
-                  setSubRegion("")
-                }}
+                onChange={(e) => setRegion(e.target.value)}
               >
                 <option value="">Select region...</option>
-                {Object.entries(REGIONS).map(([k, v]) => (
+                {Object.entries(countryRegions).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
               </select>
             </div>
-            <div className="space-y-2">
-              <Label>Sub-region (optional)</Label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={subRegion}
-                onChange={(e) => setSubRegion(e.target.value)}
-                disabled={!region}
-              >
-                <option value="">All</option>
-                {Object.entries(subRegions).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
 
           {showRooms && (
             <div className="space-y-2">
