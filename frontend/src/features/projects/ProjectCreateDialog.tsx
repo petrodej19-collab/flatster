@@ -46,7 +46,7 @@ export function ProjectCreateDialog() {
   const countrySubregions = SUBREGIONS[country] || {}
   const subRegions = region ? countrySubregions[region] || {} : {}
   const hasSubRegions = Object.keys(countrySubregions).length > 0
-  const showRooms = propertyType === "stanowanie"
+  const showRooms = propertyType === "stanovanje"
 
   const handleCountryChange = (value: string) => {
     const next = (value === "hr" ? "hr" : "si") as Country
