@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "./client"
 
 export interface ProjectFilters {
+  country: "si" | "hr"
   transaction: string
   region: string
   sub_region?: string | null
