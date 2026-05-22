@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { formatRelativeTime } from "@/lib/utils"
-import { REGIONS, PROPERTY_TYPES } from "@/lib/constants"
+import { COUNTRIES, REGIONS, PROPERTY_TYPES } from "@/lib/constants"
 
 interface Props {
   project: Project
@@ -43,8 +43,13 @@ export function ProjectSettingsPanel({ project }: Props) {
 
       <div className="space-y-2 text-sm">
         <div>
+          <span className="text-muted-foreground">Country: </span>
+          {COUNTRIES[project.filters.country ?? "si"] ?? project.filters.country ?? "si"}
+        </div>
+        <div>
           <span className="text-muted-foreground">Region: </span>
-          {REGIONS[project.filters.region] || project.filters.region}
+          {REGIONS[project.filters.country ?? "si"]?.[project.filters.region]
+            ?? project.filters.region}
         </div>
         <div>
           <span className="text-muted-foreground">Type: </span>
