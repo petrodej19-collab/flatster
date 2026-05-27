@@ -163,9 +163,6 @@ async def score_listing(
     market: MarketContext | None,
     settings,
 ) -> AiScoreResult | None:
-    if listing.description is None:
-        return None
-
     prompt = build_prompt(
         title=listing.title,
         location=listing.location,
@@ -214,13 +211,14 @@ async def score_project_listings_ai(
     if project is None or not project.ai_scoring_enabled:
         return 0
 
-    # Get unscored listings with descriptions in active/price_changed status
+    # Get unscored listings in active/price_changed status.
+    # Description is optional: when missing (e.g., detail page blocked by Cloudflare),
+    # the model still scores based on card-level facts (price, size, year, floor, etc.).
     listings_result = await session.execute(
         select(Listing)
         .where(
             Listing.project_id == project_id,
             Listing.ai_score.is_(None),
-            Listing.description.isnot(None),
             Listing.status.in_(["active", "price_changed"]),
         )
         .limit(settings.AI_MAX_LISTINGS_PER_RUN)
