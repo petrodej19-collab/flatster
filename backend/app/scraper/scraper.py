@@ -37,28 +37,7 @@ async def scrape_project(
     session = await create_browser_session(settings)
     listings: list[ScrapedListing] = []
     try:
-        # Use a single page for warmup + list scraping to preserve JS state
         page = await session.context.new_page()
-
-        # Warmup: visit homepage to solve Cloudflare challenge
-        try:
-            await page.goto("https://www.nepremicnine.net/", wait_until="domcontentloaded", timeout=30000)
-            title = await page.title()
-            html_preview = await page.content()
-            if _is_cloudflare_challenge(title, html_preview):
-                logger.info("Cloudflare challenge on homepage, waiting...")
-                resolved = await _wait_for_cloudflare(page)
-                if resolved:
-                    logger.info("Cloudflare challenge passed on warmup")
-                else:
-                    logger.warning("Cloudflare challenge failed on warmup")
-            else:
-                await page.wait_for_timeout(2000)
-                logger.info("Warmup visit complete, cookies set")
-        except Exception:
-            logger.warning("Warmup visit failed, continuing anyway")
-
-        await asyncio.sleep(random.uniform(3, 6))
 
         all_cards, all_pages_fetched = await _scrape_list_pages(session, base_url, settings, page)
         logger.info("Collected %d listing cards (all pages: %s)", len(all_cards), all_pages_fetched)
@@ -100,41 +79,46 @@ async def scrape_project(
 async def _scrape_list_pages(
     session: BrowserSession, base_url: str, settings: Settings, page: Page
 ) -> tuple[list[ListingCard], bool]:
-    """Scrape all list pages using the provided page. Returns (cards, all_pages_fetched)."""
+    """Scrape all list pages using the provided page. Returns (cards, all_pages_fetched).
+
+    If pagination is interrupted by a Cloudflare/rate-limit block after page 1, we keep
+    the cards collected so far and return all_pages_fetched=False so the sync layer
+    treats this as a partial scrape (no sold-marking).
+    """
     all_cards: list[ListingCard] = []
-    all_pages_fetched = False
 
-    try:
-        html = await _navigate_with_retry(page, base_url, settings)
-        if html is None:
-            return [], False
+    html = await _navigate_with_retry(page, base_url, settings)
+    if html is None:
+        return [], False
 
-        cards, total_pages = parse_list_page(html)
-        all_cards.extend(cards)
-        logger.info("Page 1/%d: %d cards", total_pages, len(cards))
+    cards, total_pages = parse_list_page(html)
+    all_cards.extend(cards)
+    logger.info("Page 1/%d: %d cards", total_pages, len(cards))
 
-        pages_fetched = 1
-        for page_num in range(2, total_pages + 1):
-            delay = random.uniform(settings.SCRAPER_PAGE_DELAY_MIN, settings.SCRAPER_PAGE_DELAY_MAX)
-            await asyncio.sleep(delay)
+    pages_fetched = 1
+    for page_num in range(2, total_pages + 1):
+        delay = random.uniform(settings.SCRAPER_PAGE_DELAY_MIN, settings.SCRAPER_PAGE_DELAY_MAX)
+        await asyncio.sleep(delay)
 
-            page_url = build_paginated_url(base_url, page_num)
+        page_url = build_paginated_url(base_url, page_num)
+        try:
             html = await _navigate_with_retry(page, page_url, settings)
-            if html is None:
-                logger.warning("Failed to load page %d, stopping pagination", page_num)
-                break
+        except RateLimitedError:
+            logger.warning(
+                "Rate-limited at page %d/%d, keeping %d cards from earlier pages",
+                page_num, total_pages, len(all_cards),
+            )
+            return all_cards, False
+        if html is None:
+            logger.warning("Failed to load page %d, stopping pagination", page_num)
+            break
 
-            cards, _ = parse_list_page(html)
-            all_cards.extend(cards)
-            pages_fetched += 1
-            logger.info("Page %d/%d: %d cards", page_num, total_pages, len(cards))
+        cards, _ = parse_list_page(html)
+        all_cards.extend(cards)
+        pages_fetched += 1
+        logger.info("Page %d/%d: %d cards", page_num, total_pages, len(cards))
 
-        all_pages_fetched = pages_fetched == total_pages
-
-    finally:
-        pass  # Page owned by caller
-
-    return all_cards, all_pages_fetched
+    return all_cards, pages_fetched == total_pages
 
 
 async def _scrape_detail_pages(
@@ -159,7 +143,17 @@ async def _scrape_detail_pages(
                 delay = random.uniform(settings.SCRAPER_DETAIL_DELAY_MIN, settings.SCRAPER_DETAIL_DELAY_MAX)
                 await asyncio.sleep(delay)
 
-            html = await _navigate_with_retry(page, card.url, settings)
+            try:
+                html = await _navigate_with_retry(page, card.url, settings)
+            except RateLimitedError:
+                logger.warning(
+                    "Rate-limited at detail page %d/%d; falling back to card-only data for remaining %d listings",
+                    i + 1, len(cards), len(cards) - i,
+                )
+                for remaining_card in cards[i:]:
+                    listings.append(_card_to_listing(remaining_card))
+                break
+
             if html is None:
                 logger.warning("Failed to load detail page for %s, using card data only", card.external_id)
                 listings.append(_card_to_listing(card))
