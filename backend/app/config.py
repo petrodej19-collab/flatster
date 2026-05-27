@@ -4,7 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@db:5432/nepremicnine_tracker"
 
-    SCRAPER_HEADLESS: bool = True
+    # Headless Chromium gets fingerprinted by Cloudflare on nepremicnine.net
+    # (list pages partially serve; detail pages hang on an unsolvable challenge).
+    # Headed mode under Xvfb works, so default to headed. The Dockerfile starts
+    # Xvfb on :99 and exports DISPLAY so this works out of the box in Docker.
+    SCRAPER_HEADLESS: bool = False
     SCRAPER_MAX_DETAIL_PAGES_PER_RUN: int = 100
     SCRAPER_PAGE_DELAY_MIN: float = 2.0
     SCRAPER_PAGE_DELAY_MAX: float = 5.0
