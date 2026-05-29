@@ -61,8 +61,9 @@ machine:
 1. Look up the `listing_image` row by `(listing_id, position)`. If no row,
    return 404.
 2. If `image_data` is non-NULL → respond `200 image/webp` with
-   `Cache-Control: public, max-age=31536000, immutable` and an ETag derived
-   from `(listing_id, position, fetched_at)`.
+   `Cache-Control: public, max-age=31536000, immutable`. No ETag — the
+   `immutable` directive tells browsers not to revalidate, and the URL
+   is stable per `(listing_id, position)`, so an ETag adds no value.
 3. If `image_data` is NULL and `fetch_failed_at` is non-NULL → return 404
    (tombstone, never retried).
 4. Otherwise (NULL bytes, no tombstone): lazy-fetch
