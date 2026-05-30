@@ -17,6 +17,16 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.listing import ListingDetail, ListingSummary, PaginatedListings
 
+def _search_tokens(q: str | None) -> list[str]:
+    """Split a search query on whitespace and lowercase the tokens.
+
+    Lowercasing here means the SQL only needs to lowercase the column side.
+    """
+    if not q:
+        return []
+    return [t.lower() for t in q.split() if t]
+
+
 router = APIRouter()
 
 
