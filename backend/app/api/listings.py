@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -46,6 +46,7 @@ async def _verify_project_ownership(
 async def list_listings(
     project_id: UUID,
     status_filter: str | None = Query(None, alias="status"),
+    q: str | None = Query(None),
     min_price: float | None = None,
     max_price: float | None = None,
     min_size: float | None = None,
@@ -71,6 +72,15 @@ async def list_listings(
         query = query.where(Listing.size_m2 >= min_size)
     if max_size is not None:
         query = query.where(Listing.size_m2 <= max_size)
+    for token in _search_tokens(q):
+        like_pattern = f"%{token}%"
+        query = query.where(
+            or_(
+                func.lower(Listing.title).like(like_pattern),
+                func.lower(Listing.location).like(like_pattern),
+                func.lower(Listing.description).like(like_pattern),
+            )
+        )
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
