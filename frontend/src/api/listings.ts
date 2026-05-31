@@ -44,6 +44,7 @@ export interface PaginatedListings {
 }
 
 export interface ListingFilters {
+  q?: string
   status?: string
   min_price?: number
   max_price?: number
@@ -60,6 +61,7 @@ export function useListings(projectId: string, filters: ListingFilters = {}) {
     queryKey: ["listings", projectId, filters],
     queryFn: async () => {
       const params = new URLSearchParams()
+      if (filters.q && filters.q.trim()) params.set("q", filters.q.trim())
       if (filters.status) params.set("status", filters.status)
       if (filters.min_price != null) params.set("min_price", String(filters.min_price))
       if (filters.max_price != null) params.set("max_price", String(filters.max_price))
