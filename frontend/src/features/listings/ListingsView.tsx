@@ -31,6 +31,19 @@ export function ListingsView({ projectId }: Props) {
     return { sort_by: "first_seen_at", sort_order: "desc", page: 1, per_page: 25 }
   })
   const [previewIdx, setPreviewIdx] = useState<number | null>(null)
+  const [searchInput, setSearchInput] = useState<string>("")
+
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    const t = setTimeout(() => {
+      setFilters((prev) => {
+        const nextQ = trimmed || undefined
+        if (prev.q === nextQ) return prev
+        return { ...prev, q: nextQ, page: 1 }
+      })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
 
   const { data, isLoading, isFetching } = useListings(projectId, filters)
   const items = data?.items ?? []
@@ -80,6 +93,16 @@ export function ListingsView({ projectId }: Props) {
 
   return (
     <div>
+      {/* Search */}
+      <div className="mb-3">
+        <Input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search listings…"
+        />
+      </div>
+
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <select
