@@ -17,6 +17,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.listing import ListingDetail, ListingSummary, PaginatedListings
 
+
 def _search_tokens(q: str | None) -> list[str]:
     """Split a search query on whitespace and lowercase the tokens.
 
@@ -25,6 +26,11 @@ def _search_tokens(q: str | None) -> list[str]:
     if not q:
         return []
     return [t.lower() for t in q.split() if t]
+
+
+def _escape_like(token: str) -> str:
+    """Escape LIKE metacharacters so the token matches literally."""
+    return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 router = APIRouter()
@@ -73,12 +79,12 @@ async def list_listings(
     if max_size is not None:
         query = query.where(Listing.size_m2 <= max_size)
     for token in _search_tokens(q):
-        like_pattern = f"%{token}%"
+        like_pattern = f"%{_escape_like(token)}%"
         query = query.where(
             or_(
-                func.lower(Listing.title).like(like_pattern),
-                func.lower(Listing.location).like(like_pattern),
-                func.lower(Listing.description).like(like_pattern),
+                func.lower(Listing.title).like(like_pattern, escape="\\"),
+                func.lower(Listing.location).like(like_pattern, escape="\\"),
+                func.lower(Listing.description).like(like_pattern, escape="\\"),
             )
         )
 

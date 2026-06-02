@@ -81,9 +81,10 @@ and with sorting; pagination resets to page 1 on a new query.
 - Multiple consecutive spaces → collapsed by the split.
 - Very long `q` (>200 chars) → no special handling; Postgres handles it
   fine and the user obviously meant it.
-- A token that contains SQL wildcards (`%`, `_`) → harmless because the
-  query is parameterized; the wildcards become literal matches against
-  whatever happens to contain them, which is the intuitive behavior.
+- A token that contains LIKE metacharacters (`%`, `_`, `\`) → these are
+  escaped before pattern construction so they match literally. Note that
+  parameterization alone is not enough: it prevents SQL injection but
+  LIKE still interprets `%` and `_` as wildcards even from a bound value.
 
 ## Testing
 
