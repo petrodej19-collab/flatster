@@ -97,3 +97,23 @@ async def test_fetch_and_store_marks_tombstone_on_404(monkeypatch):
     assert row.image_data is None
     assert isinstance(row.fetch_failed_at, datetime)
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_store_marks_tombstone_on_decode_failure(monkeypatch):
+    row = _FakeRow("https://example.com/broken.jpg")
+    session = MagicMock()
+    session.commit = AsyncMock()
+
+    mock_resp = MagicMock(status_code=200, content=b"not-a-real-image")
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: mock_client)
+
+    result = await fetch_and_store(session, row)
+    assert result is None
+    assert row.image_data is None
+    assert isinstance(row.fetch_failed_at, datetime)
+    session.commit.assert_awaited_once()
