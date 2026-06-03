@@ -1,11 +1,13 @@
+import asyncio
 import csv
 import io
 import json
+from collections import defaultdict
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.database import get_session
 from app.models.listing import Listing
+from app.models.listing_image import ListingImage
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.listing import ListingDetail, ListingSummary, PaginatedListings
+from app.services.image_fetcher import fetch_and_store
 
 
 def _search_tokens(q: str | None) -> list[str]:
@@ -31,6 +35,26 @@ def _search_tokens(q: str | None) -> list[str]:
 def _escape_like(token: str) -> str:
     """Escape LIKE metacharacters so the token matches literally."""
     return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+_IMAGE_CACHE_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+}
+
+# Single-flight: one in-flight fetch per (listing_id, position). The dict
+# grows by one entry per image ever fetched (~75 K max for the current
+# dataset) — bounded and small enough not to bother with cleanup.
+_image_fetch_locks: dict[tuple[UUID, int], asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+async def _load_image_row(session, listing_id: UUID, position: int):
+    result = await session.execute(
+        select(ListingImage).where(
+            ListingImage.listing_id == listing_id,
+            ListingImage.position == position,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 router = APIRouter()
@@ -180,6 +204,50 @@ async def get_listing(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
     return ListingDetail.model_validate(listing)
+
+
+@router.get("/{project_id}/listings/{listing_id}/image/{position}")
+async def serve_listing_image(
+    project_id: UUID,
+    listing_id: UUID,
+    position: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Serve a stored listing image. Lazy-fetches on first call."""
+    row = await _load_image_row(session, listing_id, position)
+    if row is None:
+        raise HTTPException(status_code=404, detail="image not found")
+    if row.image_data is not None:
+        return Response(
+            content=bytes(row.image_data),
+            media_type=row.mime_type or "image/webp",
+            headers=_IMAGE_CACHE_HEADERS,
+        )
+    if row.fetch_failed_at is not None:
+        raise HTTPException(status_code=404, detail="image unavailable")
+
+    async with _image_fetch_locks[(listing_id, position)]:
+        # Re-check after acquiring the lock: another coroutine may have
+        # just filled in this row.
+        row = await _load_image_row(session, listing_id, position)
+        if row is None:
+            raise HTTPException(status_code=404, detail="image not found")
+        if row.image_data is not None:
+            return Response(
+                content=bytes(row.image_data),
+                media_type=row.mime_type or "image/webp",
+                headers=_IMAGE_CACHE_HEADERS,
+            )
+        if row.fetch_failed_at is not None:
+            raise HTTPException(status_code=404, detail="image unavailable")
+        data = await fetch_and_store(session, row)
+        if data is None:
+            raise HTTPException(status_code=404, detail="image unavailable")
+        return Response(
+            content=bytes(data),
+            media_type="image/webp",
+            headers=_IMAGE_CACHE_HEADERS,
+        )
 
 
 @router.post("/{project_id}/listings/{listing_id}/score")
