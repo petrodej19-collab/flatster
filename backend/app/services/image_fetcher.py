@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 import httpx
@@ -33,13 +33,13 @@ async def fetch_and_store(session: AsyncSession, row) -> bytes | None:
             resp = await client.get(row.source_url)
     except httpx.HTTPError as exc:
         logger.warning("Image fetch failed for %s: %s", row.source_url, exc)
-        row.fetch_failed_at = datetime.utcnow()
+        row.fetch_failed_at = datetime.now(timezone.utc)
         await session.commit()
         return None
 
     if resp.status_code != 200 or not resp.content:
         logger.info("Image fetch non-200 for %s: %d", row.source_url, resp.status_code)
-        row.fetch_failed_at = datetime.utcnow()
+        row.fetch_failed_at = datetime.now(timezone.utc)
         await session.commit()
         return None
 
@@ -47,12 +47,12 @@ async def fetch_and_store(session: AsyncSession, row) -> bytes | None:
         encoded = encode_webp(resp.content)
     except Exception as exc:
         logger.warning("Image decode failed for %s: %s", row.source_url, exc)
-        row.fetch_failed_at = datetime.utcnow()
+        row.fetch_failed_at = datetime.now(timezone.utc)
         await session.commit()
         return None
 
     row.image_data = encoded
     row.mime_type = "image/webp"
-    row.fetched_at = datetime.utcnow()
+    row.fetched_at = datetime.now(timezone.utc)
     await session.commit()
     return encoded

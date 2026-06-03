@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, LargeBinary, SmallInteger, Text
+from sqlalchemy import DateTime, ForeignKey, LargeBinary, SmallInteger, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,5 +20,5 @@ class ListingImage(Base):
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, default=None)
     mime_type: Mapped[str | None] = mapped_column(Text, default=None)
-    fetched_at: Mapped[datetime | None] = mapped_column(default=None)
-    fetch_failed_at: Mapped[datetime | None] = mapped_column(default=None)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    fetch_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
