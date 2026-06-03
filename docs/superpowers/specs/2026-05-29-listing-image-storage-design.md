@@ -26,11 +26,11 @@ Out of scope:
 
 ## Schema
 
-New table `listing_image`:
+New table `listing_images`:
 
 | column            | type        | notes                                                         |
 |-------------------|-------------|---------------------------------------------------------------|
-| `listing_id`      | uuid        | FK → `listing.id` ON DELETE CASCADE, part of PK               |
+| `listing_id`      | uuid        | FK → `listings.id` ON DELETE CASCADE, part of PK              |
 | `position`        | smallint    | 0, 1, or 2, part of PK                                        |
 | `source_url`      | text NOT NULL | the original `img.nepremicnine.net` URL                     |
 | `image_data`      | bytea NULL  | resized WebP bytes; NULL = "not fetched yet"                  |
@@ -58,7 +58,7 @@ load in `<img>` tags. The `project_id` segment is required for URL
 consistency only; the handler does not verify project ownership. State
 machine:
 
-1. Look up the `listing_image` row by `(listing_id, position)`. If no row,
+1. Look up the `listing_images` row by `(listing_id, position)`. If no row,
    return 404.
 2. If `image_data` is non-NULL → respond `200 image/webp` with
    `Cache-Control: public, max-age=31536000, immutable`. No ETag — the
@@ -80,7 +80,7 @@ machine:
 ### Scrape-time integration
 
 In `app/services/scraper_sync.py`, when a scraped listing is inserted or
-updated, write up to three `listing_image` rows from
+updated, write up to three `listing_images` rows from
 `scraped.images[0:3]` with `source_url` set, `image_data` NULL. Use upsert
 keyed on `(listing_id, position)`:
 
@@ -94,8 +94,8 @@ Listings with fewer than three images get fewer rows.
 
 `ListingRead.images` becomes a list of strings whose values are
 `/api/projects/{project_id}/listings/{listing_id}/image/{position}` — one entry per row that
-exists in `listing_image`, ordered by `position`. The list is built from
-`listing_image` rows, not from the legacy `listing.images` JSONB.
+exists in `listing_images`, ordered by `position`. The list is built from
+`listing_images` rows, not from the legacy `listing.images` JSONB.
 
 `thumbnail_url` is already a computed property of `images[0]`, so it
 follows automatically.
@@ -117,11 +117,11 @@ now, which the Vite dev proxy already forwards via `/api`.
 
 ## Migration
 
-Alembic revision adds the `listing_image` table and runs the data
+Alembic revision adds the `listing_images` table and runs the data
 backfill in the same upgrade:
 
 ```sql
-CREATE TABLE listing_image (
+CREATE TABLE listing_images (
     listing_id UUID NOT NULL REFERENCES listing(id) ON DELETE CASCADE,
     position SMALLINT NOT NULL,
     source_url TEXT NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE listing_image (
     PRIMARY KEY (listing_id, position)
 );
 
-INSERT INTO listing_image (listing_id, position, source_url)
+INSERT INTO listing_images (listing_id, position, source_url)
 SELECT l.id, idx - 1, l.images->>(idx - 1)
 FROM listing l
 JOIN LATERAL generate_series(1, LEAST(jsonb_array_length(l.images), 3)) AS idx ON TRUE
