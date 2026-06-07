@@ -57,6 +57,13 @@ async def _load_image_row(session, listing_id: UUID, position: int):
     return result.scalar_one_or_none()
 
 
+def _build_image_urls(project_id: UUID, listing_id: UUID, count: int) -> list[str]:
+    return [
+        f"/api/projects/{project_id}/listings/{listing_id}/image/{i}"
+        for i in range(count)
+    ]
+
+
 router = APIRouter()
 
 
@@ -128,6 +135,19 @@ async def list_listings(
 
     result = await session.execute(query)
     listings = result.scalars().all()
+
+    listing_ids = [l.id for l in listings]
+    counts: dict = {}
+    if listing_ids:
+        count_rows = await session.execute(
+            select(ListingImage.listing_id, func.count())
+            .where(ListingImage.listing_id.in_(listing_ids))
+            .group_by(ListingImage.listing_id)
+        )
+        counts = {row[0]: row[1] for row in count_rows.all()}
+
+    for l in listings:
+        l.images = _build_image_urls(project_id, l.id, counts.get(l.id, 0))
 
     return PaginatedListings(
         items=[ListingSummary.model_validate(l) for l in listings],
@@ -202,6 +222,14 @@ async def get_listing(
     listing = result.scalar_one_or_none()
     if listing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
+
+    count_result = await session.execute(
+        select(func.count()).select_from(ListingImage).where(
+            ListingImage.listing_id == listing.id
+        )
+    )
+    count = count_result.scalar_one() or 0
+    listing.images = _build_image_urls(project_id, listing.id, count)
 
     return ListingDetail.model_validate(listing)
 
