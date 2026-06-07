@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _upsert_listing_images(
-    session, listing_id, image_urls: list[str]
+    session: AsyncSession, listing_id: UUID, image_urls: list[str]
 ) -> None:
     """Sync up to the first 3 image source URLs for a listing.
 
