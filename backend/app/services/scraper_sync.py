@@ -3,14 +3,56 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.listing import Listing
+from app.models.listing_image import ListingImage
 from app.schemas.scraper import ScrapedListing
 
 logger = logging.getLogger(__name__)
+
+
+async def _upsert_listing_images(
+    session, listing_id, image_urls: list[str]
+) -> None:
+    """Sync up to the first 3 image source URLs for a listing.
+
+    Rules:
+    - For positions 0..min(len, 3)-1, insert a row or, if one exists with
+      a different source_url, overwrite the whole row (bytes reset).
+    - Positions beyond len(image_urls) are deleted (e.g., the listing now
+      has fewer images than before).
+    """
+    capped = image_urls[:3]
+    for position, url in enumerate(capped):
+        stmt = pg_insert(ListingImage).values(
+            listing_id=listing_id,
+            position=position,
+            source_url=url,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["listing_id", "position"],
+            set_={
+                "source_url": stmt.excluded.source_url,
+                "image_data": None,
+                "mime_type": None,
+                "fetched_at": None,
+                "fetch_failed_at": None,
+            },
+            where=ListingImage.source_url != stmt.excluded.source_url,
+        )
+        await session.execute(stmt)
+
+    # Trim positions that no longer exist
+    await session.execute(
+        delete(ListingImage).where(
+            ListingImage.listing_id == listing_id,
+            ListingImage.position >= len(capped),
+        )
+    )
 
 
 @dataclass
@@ -94,6 +136,8 @@ async def sync_scraped_listings(
                 last_seen_at=now,
             )
             session.add(listing)
+            await session.flush()  # populate listing.id before upsert
+            await _upsert_listing_images(session, listing.id, item.images or [])
             new_count += 1
 
         elif action == "price_changed":
@@ -114,6 +158,7 @@ async def sync_scraped_listings(
             history = list(existing.price_history)
             history.append({"price": str(item.price), "date": today})
             existing.price_history = history
+            await _upsert_listing_images(session, existing.id, item.images or [])
             updated_count += 1
 
         else:  # unchanged
@@ -125,6 +170,7 @@ async def sync_scraped_listings(
                 existing.images = item.images
             existing.energy_class = item.energy_class or existing.energy_class
             existing.year_renovated = item.year_renovated or existing.year_renovated
+            await _upsert_listing_images(session, existing.id, item.images or [])
 
     # Sold detection — only when scrape was complete
     marked_sold = 0
