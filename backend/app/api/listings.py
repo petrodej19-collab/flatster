@@ -64,6 +64,29 @@ def _build_image_urls(project_id: UUID, listing_id: UUID, count: int) -> list[st
     ]
 
 
+async def apply_image_urls(
+    session: AsyncSession, listings: list[Listing]
+) -> None:
+    """Replace each listing's `images` JSONB with backend image-serving URLs.
+
+    Mutates the ORM instances in place; safe to call before Pydantic
+    `model_validate` so the new URLs are serialized. Uses each listing's
+    own `project_id`, so this works for cross-project endpoints (e.g.
+    favorites).
+    """
+    if not listings:
+        return
+    listing_ids = [l.id for l in listings]
+    count_rows = await session.execute(
+        select(ListingImage.listing_id, func.count())
+        .where(ListingImage.listing_id.in_(listing_ids))
+        .group_by(ListingImage.listing_id)
+    )
+    counts = {row[0]: row[1] for row in count_rows.all()}
+    for l in listings:
+        l.images = _build_image_urls(l.project_id, l.id, counts.get(l.id, 0))
+
+
 router = APIRouter()
 
 
@@ -136,18 +159,7 @@ async def list_listings(
     result = await session.execute(query)
     listings = result.scalars().all()
 
-    listing_ids = [l.id for l in listings]
-    counts: dict = {}
-    if listing_ids:
-        count_rows = await session.execute(
-            select(ListingImage.listing_id, func.count())
-            .where(ListingImage.listing_id.in_(listing_ids))
-            .group_by(ListingImage.listing_id)
-        )
-        counts = {row[0]: row[1] for row in count_rows.all()}
-
-    for l in listings:
-        l.images = _build_image_urls(project_id, l.id, counts.get(l.id, 0))
+    await apply_image_urls(session, listings)
 
     return PaginatedListings(
         items=[ListingSummary.model_validate(l) for l in listings],
@@ -223,13 +235,7 @@ async def get_listing(
     if listing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
-    count_result = await session.execute(
-        select(func.count()).select_from(ListingImage).where(
-            ListingImage.listing_id == listing.id
-        )
-    )
-    count = count_result.scalar_one() or 0
-    listing.images = _build_image_urls(project_id, listing.id, count)
+    await apply_image_urls(session, [listing])
 
     return ListingDetail.model_validate(listing)
 

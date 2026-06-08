@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.api.listings import apply_image_urls
 from app.database import get_session
 from app.models.favorite import Favorite
 from app.models.listing import Listing
@@ -68,4 +69,5 @@ async def list_favorites(
         .order_by(Favorite.created_at.desc())
     )
     listings = result.scalars().all()
+    await apply_image_urls(session, listings)
     return [ListingSummary.model_validate(l) for l in listings]
