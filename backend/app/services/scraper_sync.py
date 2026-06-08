@@ -147,7 +147,8 @@ async def sync_scraped_listings(
             existing.size_m2 = item.size_m2 or existing.size_m2
             existing.description = item.description or existing.description
             # Only update images if new data has more (avoid overwriting detail images with card thumbnail)
-            if item.images and len(item.images) > len(existing.images or []):
+            scrape_has_more_images = bool(item.images) and len(item.images) > len(existing.images or [])
+            if scrape_has_more_images:
                 existing.images = item.images
             existing.year_built = item.year_built or existing.year_built
             existing.year_renovated = item.year_renovated or existing.year_renovated
@@ -159,7 +160,8 @@ async def sync_scraped_listings(
             history = list(existing.price_history)
             history.append({"price": str(item.price), "date": today})
             existing.price_history = history
-            await _upsert_listing_images(session, existing.id, item.images or [])
+            if scrape_has_more_images:
+                await _upsert_listing_images(session, existing.id, item.images or [])
             updated_count += 1
 
         else:  # unchanged
@@ -167,11 +169,13 @@ async def sync_scraped_listings(
             existing.last_seen_at = now
             existing.description = item.description or existing.description
             # Only update images if new data has more (avoid overwriting detail images with card thumbnail)
-            if item.images and len(item.images) > len(existing.images or []):
+            scrape_has_more_images = bool(item.images) and len(item.images) > len(existing.images or [])
+            if scrape_has_more_images:
                 existing.images = item.images
             existing.energy_class = item.energy_class or existing.energy_class
             existing.year_renovated = item.year_renovated or existing.year_renovated
-            await _upsert_listing_images(session, existing.id, item.images or [])
+            if scrape_has_more_images:
+                await _upsert_listing_images(session, existing.id, item.images or [])
 
     # Sold detection — only when scrape was complete
     marked_sold = 0

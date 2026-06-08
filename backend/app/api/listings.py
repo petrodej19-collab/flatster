@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,7 +244,7 @@ async def get_listing(
 async def serve_listing_image(
     project_id: UUID,
     listing_id: UUID,
-    position: int,
+    position: int = Path(ge=0, le=2),
     session: AsyncSession = Depends(get_session),
 ):
     """Serve a stored listing image. Lazy-fetches on first call."""
