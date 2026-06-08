@@ -1,8 +1,12 @@
+from datetime import datetime
 from io import BytesIO
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
+import pytest
 from PIL import Image
 
-from app.services.image_fetcher import encode_webp
+from app.services.image_fetcher import encode_webp, fetch_and_store
 
 
 def _make_jpeg(width: int, height: int) -> bytes:
@@ -36,15 +40,6 @@ def test_encode_webp_handles_png_input():
     img.save(buf, format="PNG")
     out = encode_webp(buf.getvalue(), max_width=800)
     assert Image.open(BytesIO(out)).format == "WEBP"
-
-
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
-
-import httpx
-import pytest
-
-from app.services.image_fetcher import fetch_and_store
 
 
 class _FakeRow:
