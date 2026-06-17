@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,11 @@ class Project(UUIDMixin, TimestampMixin, Base):
     scrape_url: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     ai_scoring_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When set, AI scoring ignores listings whose first_seen_at <= this value.
+    # Use case: skip a backlog of legacy listings without scoring them.
+    ai_score_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     last_scraped_at: Mapped[datetime | None] = mapped_column(default=None)
     listings: Mapped[list["Listing"]] = relationship(
         "Listing", back_populates="project", cascade="all, delete-orphan"

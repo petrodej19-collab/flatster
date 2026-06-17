@@ -214,14 +214,18 @@ async def score_project_listings_ai(
     # Get unscored listings in active/price_changed status.
     # Description is optional: when missing (e.g., detail page blocked by Cloudflare),
     # the model still scores based on card-level facts (price, size, year, floor, etc.).
+    filters = [
+        Listing.project_id == project_id,
+        Listing.ai_score.is_(None),
+        Listing.status.in_(["active", "price_changed"]),
+    ]
+    if project.ai_score_after is not None:
+        # listings.first_seen_at is naive UTC; normalize the tz-aware cutoff
+        # so asyncpg accepts the comparison.
+        cutoff = project.ai_score_after.replace(tzinfo=None)
+        filters.append(Listing.first_seen_at > cutoff)
     listings_result = await session.execute(
-        select(Listing)
-        .where(
-            Listing.project_id == project_id,
-            Listing.ai_score.is_(None),
-            Listing.status.in_(["active", "price_changed"]),
-        )
-        .limit(settings.AI_MAX_LISTINGS_PER_RUN)
+        select(Listing).where(*filters).limit(settings.AI_MAX_LISTINGS_PER_RUN)
     )
     listings = listings_result.scalars().all()
 
